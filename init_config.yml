@@ -1,0 +1,74 @@
+---
+- name: Initial setup
+  hosts: hl_local
+  become: true
+  vars_files:
+    - vars/main.yml
+  tasks:
+    - name: Update & Upgrade
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        autoremove: true
+        autoclean: true
+      register: apt_action
+      retries: 50
+      until: apt_action is success or ('Failed to lock apt for exclusive operation' not in apt_action.msg and '/var/lib/dpkg/lock' not in apt_action.msg)
+
+    - name: Add user ebenezer
+      ansible.builtin.user:
+        name: ebenezer
+        shell: /bin/bash
+        groups:
+          - sudo
+        state: present
+
+    - name: Set authorized key to user ebenezer
+      ansible.posix.authorized_key:
+        user: ebenezer
+        state: present
+        key: "{{ authorized_key }}"
+      tags:
+        - ssh_key
+
+    - name: Configure ebenezer to sudo without password
+      community.general.sudoers:
+        name: ebenezer
+        user: ebenezer
+        host: ALL
+        commands: ALL
+        nopassword: true
+        state: present
+
+    - name: Add .ssh directory to user ebenezer
+      ansible.builtin.file:
+        path: /home/ebenezer/.ssh
+
+    - name: Add tailscale's official GPG key
+      ansible.builtin.get_url:
+        url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+        dest: /usr/share/keyrings/tailscale.gpg.old
+        mode: "0644"
+      notify: Dearmor tailscale official GPG key
+
+    - name: Run handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Add tailscale's repository
+      ansible.builtin.apt_repository:
+        repo: deb [signed-by=/usr/share/keyrings/tailscale.gpg] https://pkgs.tailscale.com/stable/ubuntu {{ ansible_distribution_release }} main
+        state: present
+        filename: tailscale
+
+    - name: Install tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: true
+
+  handlers:
+    - name: Dearmor tailscale official GPG key
+      ansible.builtin.command: gpg --batch --yes --dearmor --output tailscale.gpg tailscale.gpg.old
+      args:
+        chdir: /usr/share/keyrings
+      changed_when: true
