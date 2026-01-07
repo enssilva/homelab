@@ -5,3 +5,4 @@ files/*.csr
 files/*.key
 files/*.ext
 ansible_collections
+.secret

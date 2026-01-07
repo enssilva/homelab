@@ -1,4 +1,4 @@
-# orange-pi-zero3
+# homelab
 ## Initial configuration
 First set in **/etc/hosts** the host orangepizero3_local pointing to the local IP of the Orange PI zero3.
 ```

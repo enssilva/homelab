@@ -1,5 +1,4 @@
 ---
-# portainer_install_version: 2.27.3
 portainer_install_version: 2.33.6
 authorized_key: |
   ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDR87XUsu9wAhCOwgkOSSvk30SkJ0m62oJ1iCreW+B0Cfbi2U1wmv+nQWIqkFN6ad8F5vttj40y380b9Ri00WokIIVWTh1Z31YpJI9tUPldP5uGmCT4ttMQH1rdni5J4bVpIHSYvqL2nIFAbFjUjwXRXRhL/1k8MaAKCiSKo2r2Gf8goe2V3SDVly7OZYt8eD/ZAc131TUBmm4sonj/wR9kIMCAoW94eVtVNKCWVBihZq2Lj/9usgfqXpQ/GiDUeAUWqe+HX41KJKWh5CII1ssaS9RL+gETT9/nDmAUrR+C4zM6uN5X08LBk7T9CDmRdHkvREE0iH5vApyT/7HZYa/x ebenezer@notebook

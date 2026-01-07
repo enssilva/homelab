@@ -4,6 +4,7 @@
   become: true
   vars_files:
     - vars/main.yml
+    - vars/api_keys.yml
   tasks:
     - name: Install required packages
       ansible.builtin.apt:
@@ -107,26 +108,39 @@
         mode: "0755"
       tags: traefik
 
-    - name: Copy tls configuration file
+    # - name: Copy tls configuration file
+    #   ansible.builtin.copy:
+    #     src: tls.yml
+    #     dest: /home/ebenezer/traefik/
+    #     mode: "0644"
+    #   tags: traefik
+
+    # - name: Copy private key
+    #   ansible.builtin.copy:
+    #     src: traefik.key
+    #     dest: /home/ebenezer/traefik/cert.key
+    #     mode: "0600"
+    #   tags: traefik
+
+    # - name: Copy self-signed certificate
+    #   ansible.builtin.copy:
+    #     src: traefik.crt
+    #     dest: /home/ebenezer/traefik/cert.crt
+    #     mode: "0644"
+    #   tags: traefik
+
+    - name: Copy ACME (Let's Encrypt) configuration file
       ansible.builtin.copy:
-        src: tls.yml
+        src: acme.yml
         dest: /home/ebenezer/traefik/
         mode: "0644"
       tags: traefik
 
-    - name: Copy private key
-      ansible.builtin.copy:
-        src: traefik.key
-        dest: /home/ebenezer/traefik/cert.key
+    - name: Create ACME (Let's Encrypt) key storage file
+      ansible.builtin.file:
+        path: /home/ebenezer/traefik/acme.json
+        state: file
         mode: "0600"
-      tags: traefik
-
-    - name: Copy self-signed certificate
-      ansible.builtin.copy:
-        src: traefik.crt
-        dest: /home/ebenezer/traefik/cert.crt
-        mode: "0644"
-      tags: traefik
 
     - name: Create network for traefik
       community.docker.docker_network:
@@ -145,7 +159,9 @@
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
           - /etc/localtime:/etc/localtime:ro
-          - /home/ebenezer/traefik:/home/appuser/data
+          # - /home/ebenezer/traefik:/home/appuser/data
+          # - /home/ebenezer/traefik/acme.yml:/acme.yml:ro
+          - /home/ebenezer/traefik/acme.json:/acme.json
         restart_policy: unless-stopped
         networks:
           - name: traefik
@@ -160,9 +176,16 @@
           --entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s
           --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=600s
           --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=600s
-          --providers.file.filename=/home/appuser/data/tls.yml
+          --certificatesresolvers.spaceship.acme.email=ebenezer@duck.com
+          --certificatesresolvers.spaceship.acme.storage=/acme.json
+          --certificatesresolvers.spaceship.acme.dnschallenge=true
+          --certificatesresolvers.spaceship.acme.dnschallenge.provider=spaceship
           --log.level=DEBUG
           --api.debug=true
+          # --providers.file.filename=/acme.yml
+        env:
+          SPACESHIP_API_KEY: "{{ spaceship_api_key }}"
+          SPACESHIP_API_SECRET: "{{ spaceship_api_secret }}"
         ports:
           # The HTTP port
           - "80:80"
@@ -174,9 +197,13 @@
           # "traefik.enable=false"
           traefik.enable: "true"
           traefik.http.routers.traefik.entrypoints: websecure
-          traefik.http.routers.traefik.rule: Host(`traefik.home.local`)
+          # traefik.http.routers.traefik.rule: Host(`traefik.home.local`)
+          traefik.http.routers.traefik.rule: Host(`traefik.home.ensilva.cc`)
           traefik.http.routers.traefik.tls: "true"
-          traefik.http.routers.traefik.service: traefik
+          traefik.http.routers.traefik.tls.certresolver: spaceship
+          traefik.http.routers.traefik.tls.domains[0].main: "home.ensilva.cc"
+          traefik.http.routers.traefik.tls.domains[0].sans: "*.home.ensilva.cc"
+          # traefik.http.routers.traefik.service: traefik
           traefik.http.services.traefik.loadbalancer.server.port: 8080
           traefik.docker.network: traefik
         state: started
@@ -244,7 +271,7 @@
         labels:
           traefik.enable: "true"
           traefik.http.routers.portainer.entrypoints: websecure
-          traefik.http.routers.portainer.rule: Host(`portainer.home.local`)
+          traefik.http.routers.portainer.rule: Host(`portainer.home.ensilva.cc`)
           traefik.http.routers.portainer.tls: "true"
           traefik.http.routers.portainer.service: portainer
           traefik.http.services.portainer.loadbalancer.server.port: 9000
