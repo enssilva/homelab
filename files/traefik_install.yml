@@ -1,0 +1,42 @@
+api:
+  insecure: true
+  debug: true
+providers:
+  docker: {}
+  file:
+    filename: /traefik_routing.yml
+log:
+  level: DEBUG
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+      # Required for Nextcloud to correctly handle encoded URL characters (%2F, %3F and %25 in this case) in newer Traefik versions (v3.6.4+).
+      encodedCharacters:  
+        allowEncodedSlash: true
+        allowEncodedQuestionMark: true
+        allowEncodedPercent: true
+  websecure:
+    address: ":443"
+    transport:
+      respondingTimeouts:
+        # readTimeout: 600s
+        # [nextcloud] Allows uploads > 100MB; prevents connection reset due to chunking (public upload-only links)
+        readTimeout: 24h
+        idleTimeout: 600s
+        writeTimeout: 600s
+certificatesResolvers:
+  spaceship:
+    acme:
+      email: ebenezer@duck.com
+      storage: /acme.json
+      dnschallenge:
+        provider: spaceship
+        # resolvers:
+        #   - "launch1.spaceship.net:53"
+        #   - "launch2.spaceship.net:53"

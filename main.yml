@@ -211,11 +211,23 @@
     #     mode: "0644"
     #   tags: traefik
 
-    - name: Copy ACME (Let's Encrypt) configuration file
+    # - name: Copy ACME (Let's Encrypt) configuration file
+    #   ansible.builtin.copy:
+    #     src: acme.yml
+    #     dest: /home/ebenezer/traefik/
+    #     mode: "0644"
+    #   tags: traefik
+
+    - name: Copy traefik configuration file
       ansible.builtin.copy:
-        src: acme.yml
+        src: "{{ item }}"
         dest: /home/ebenezer/traefik/
         mode: "0644"
+        owner: ebenezer
+        group: ebenezer
+      with_items:
+        - traefik_install.yml
+        - traefik_routing.yml
       tags: traefik
 
     - name: Create ACME (Let's Encrypt) key storage file
@@ -244,27 +256,30 @@
           # - /home/ebenezer/traefik:/home/appuser/data
           # - /home/ebenezer/traefik/acme.yml:/acme.yml:ro
           - /home/ebenezer/traefik/acme.json:/acme.json
+          - /home/ebenezer/traefik/traefik_install.yml:/traefik_install.yml:ro
+          - /home/ebenezer/traefik/traefik_routing.yml:/traefik_routing.yml:ro
         restart_policy: unless-stopped
         networks:
           - name: traefik
         command:
-          --api.insecure=true
-          --providers.docker
-          --entrypoints.web.address=:80
-          --entrypoints.web.http.redirections.entryPoint.to=websecure
-          --entrypoints.web.http.redirections.entryPoint.scheme=https
-          --entrypoints.web.http.redirections.entrypoint.permanent=true
-          --entrypoints.websecure.address=:443
-          --entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s
-          --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=600s
-          --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=600s
-          --certificatesresolvers.spaceship.acme.email=ebenezer@duck.com
-          --certificatesresolvers.spaceship.acme.storage=/acme.json
-          --certificatesresolvers.spaceship.acme.dnschallenge=true
-          --certificatesresolvers.spaceship.acme.dnschallenge.provider=spaceship
+          # --api.insecure=true
+          # --providers.docker
+          # --entrypoints.web.address=:80
+          # --entrypoints.web.http.redirections.entryPoint.to=websecure
+          # --entrypoints.web.http.redirections.entryPoint.scheme=https
+          # --entrypoints.web.http.redirections.entrypoint.permanent=true
+          # --entrypoints.websecure.address=:443
+          # --entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s
+          # --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=600s
+          # --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=600s
+          # --certificatesresolvers.spaceship.acme.email=ebenezer@duck.com
+          # --certificatesresolvers.spaceship.acme.storage=/acme.json
+          # --certificatesresolvers.spaceship.acme.dnschallenge=true
+          # --certificatesresolvers.spaceship.acme.dnschallenge.provider=spaceship
           # --log.level=DEBUG
           # --api.debug=true
           # --providers.file.filename=/acme.yml
+          --configFile=/traefik_install.yml
         env:
           SPACESHIP_API_KEY: "{{ spaceship_api_key }}"
           SPACESHIP_API_SECRET: "{{ spaceship_api_secret }}"
@@ -285,8 +300,8 @@
           traefik.http.routers.traefik.tls.certresolver: spaceship
           traefik.http.routers.traefik.tls.domains[0].main: "home.ensilva.cc"
           traefik.http.routers.traefik.tls.domains[0].sans: "*.home.ensilva.cc"
-          # traefik.http.routers.traefik.service: traefik
-          traefik.http.services.traefik.loadbalancer.server.port: 8080
+          traefik.http.routers.traefik.service: traefik
+          traefik.http.services.traefik.loadbalancer.server.port: "8080"
           traefik.docker.network: traefik
         state: started
         recreate: true
