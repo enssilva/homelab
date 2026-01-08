@@ -26,8 +26,7 @@ entryPoints:
     transport:
       respondingTimeouts:
         # readTimeout: 600s
-        # [nextcloud] Allows uploads > 100MB; prevents connection reset due to chunking (public upload-only links)
-        readTimeout: 24h
+        readTimeout: 24h # [nextcloud] Allows uploads > 100MB; prevents connection reset due to chunking (public upload-only links)
         idleTimeout: 600s
         writeTimeout: 600s
 certificatesResolvers:
