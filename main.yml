@@ -6,6 +6,18 @@
     - vars/main.yml
     - vars/api_keys.yml
   tasks:
+    - name: Set to preserve hostname
+      ansible.builtin.lineinfile:
+        path: /etc/cloud/cloud.cfg
+        regexp: '^preserve_hostname:'
+        line: 'preserve_hostname: true'
+      tags: hostname
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: homelab
+      tags: hostname
+
     - name: Install required packages
       ansible.builtin.apt:
         name:
@@ -101,12 +113,82 @@
           - python3-docker
       tags: portainer
 
-    - name: Create folder to traefik configuration
+    - name: Create directory to mount external HD
       ansible.builtin.file:
-        path: /home/ebenezer/traefik
+        path: /mnt/backup
         state: directory
         mode: "0755"
-      tags: traefik
+      tags:
+        - external_hd
+        - backup
+
+    - name: Mount external HD
+      ansible.posix.mount:
+        path: /mnt/backup
+        src: /dev/sda1
+        fstype: ext4
+        opts: defaults
+        boot: true
+        state: mounted
+      tags:
+        - external_hd
+        - backup
+
+    - name: Create directory to backup
+      ansible.builtin.file:
+        path: "/mnt/backup/{{ item }}"
+        mode: "0755"
+        state: directory
+      with_items:
+        - ebenezer
+        - nextcloud
+      tags: backup
+
+    - name: Copy backup script
+      ansible.builtin.copy:
+        src: backup.sh
+        dest: /opt/
+        mode: "0744"
+        owner: root
+        group: root
+      tags: backup
+
+    - name: Add backup execution to cron
+      ansible.builtin.cron:
+        name: backup home ebenezer
+        hour: 1
+        minute: 30
+        job: XDG_RUNTIME_DIR=/run/user/$(id -u); /opt/backup.sh 2>&1 | /usr/bin/logger -t BKP
+      become: true
+      become_user: ebenezer
+      tags: backup
+
+    - name: Create directories to docker configuration
+      ansible.builtin.file:
+        path: /home/ebenezer/{{ item }}
+        state: directory
+        mode: "0755"
+      with_items:
+        - coredns
+        - immich
+        - joplindb
+        - nextcloud
+        - traefik
+        - vw-data
+      tags:
+        - coredns
+        - immich
+        - joplin
+        - nextcloud
+        - traefik
+        - vaultwarden
+
+    # - name: Create folder to traefik configuration
+    #   ansible.builtin.file:
+    #     path: /home/ebenezer/traefik
+    #     state: directory
+    #     mode: "0755"
+    #   tags: traefik
 
     # - name: Copy tls configuration file
     #   ansible.builtin.copy:
@@ -141,6 +223,7 @@
         path: /home/ebenezer/traefik/acme.json
         state: file
         mode: "0600"
+      tags: traefik
 
     - name: Create network for traefik
       community.docker.docker_network:
@@ -153,7 +236,6 @@
     - name: Create container traefik
       community.docker.docker_container:
         name: traefik
-        # image: traefik:v3.3
         image: traefik:v3.6
         hostname: traefik
         volumes:
@@ -180,8 +262,8 @@
           --certificatesresolvers.spaceship.acme.storage=/acme.json
           --certificatesresolvers.spaceship.acme.dnschallenge=true
           --certificatesresolvers.spaceship.acme.dnschallenge.provider=spaceship
-          --log.level=DEBUG
-          --api.debug=true
+          # --log.level=DEBUG
+          # --api.debug=true
           # --providers.file.filename=/acme.yml
         env:
           SPACESHIP_API_KEY: "{{ spaceship_api_key }}"
@@ -210,12 +292,12 @@
         recreate: true
       tags: traefik
 
-    - name: Create folder to CoreDNS
-      ansible.builtin.file:
-        path: /home/ebenezer/coredns
-        state: directory
-        mode: "0755"
-      tags: coredns
+    # - name: Create folder to CoreDNS
+    #   ansible.builtin.file:
+    #     path: /home/ebenezer/coredns
+    #     state: directory
+    #     mode: "0755"
+    #   tags: coredns
 
     - name: Copy file Corefile to CoreDNS
       ansible.builtin.copy:

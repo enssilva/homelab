@@ -17,7 +17,7 @@ services:
       - TZ=America/Sao_Paulo
     labels:
       - traefik.http.routers.stirling.entrypoints=websecure
-      - traefik.http.routers.stirling.rule=Host(`pdf.home.local`)
+      - traefik.http.routers.stirling.rule=Host(`pdf.home.ensilva.cc`)
       - traefik.http.routers.stirling.tls=true
       - traefik.http.routers.stirling.service=stirling
       - traefik.http.services.stirling.loadbalancer.server.port=8080

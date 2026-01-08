@@ -1,0 +1,42 @@
+name: nextcloud
+
+services:
+  nextcloud-aio-mastercontainer:
+    container_name: nextcloud-aio-mastercontainer
+    image: nextcloud/all-in-one:latest
+    volumes:
+      - nextcloud_aio_mastercontainer:/mnt/docker-aio-config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nextcloud.entrypoints=websecure
+      - traefik.http.routers.nextcloud.rule=Host(`drive.home.ensilva.cc`)
+      - traefik.http.routers.nextcloud.tls=true
+      - traefik.http.routers.nextcloud.service=nextcloud
+      - traefik.http.services.nextcloud.loadbalancer.server.url=http://localhost:11000
+      - traefik.http.routers.nextcloud.middlewares=nextcloud-secure-headers
+      - traefik.http.middlewares.nextcloud-secure-headers.headers.hostsProxyHeaders=["X-Forwarded-Host"]
+      - traefik.http.middlewares.nextcloud-secure-headers.headers.referrerPolicy="same-origin"
+      - traefik.docker.network=traefik
+    networks:
+      - traefik
+    environment:
+      - APACHE_PORT=11000
+      - APACHE_IP_BINDING=127.0.0.1
+      - NEXTCLOUD_DATADIR=/home/ebenezer/nextcloud
+      - SKIP_DOMAIN_VALIDATION=true
+      # - APACHE_ADDITIONAL_NETWORK=""
+    ports:
+      - 8080:8080
+
+networks:
+  traefik:
+    name: traefik
+    external: true
+  backend:
+    internal: true
+
+volumes:
+  nextcloud_aio_mastercontainer:
+    name: nextcloud_aio_mastercontainer

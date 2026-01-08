@@ -13,7 +13,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.joplin.entrypoints=websecure
-      - traefik.http.routers.joplin.rule=Host(`joplin.home.local`)
+      - traefik.http.routers.joplin.rule=Host(`joplin.home.ensilva.cc`)
       - traefik.http.routers.joplin.tls=true
       - traefik.http.routers.joplin.service=joplin
       - traefik.http.services.joplin.loadbalancer.server.port=22300

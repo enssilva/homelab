@@ -6,14 +6,14 @@ services:
     container_name: vaultwarden
     restart: always
     environment:
-      DOMAIN: "https://vw.home.local"  # required when using a reverse proxy; your domain; vaultwarden needs to know it's https to work properly with attachments
+      DOMAIN: "https://vw.home.ensilva.cc"  # required when using a reverse proxy; your domain; vaultwarden needs to know it's https to work properly with attachments
       SIGNUPS_ALLOWED: "true" # Deactivate this with "false" after you have created your account so that no strangers can register
     volumes:
       - /home/ebenezer/vw-data:/data # the path before the : can be changed
     labels:
       - traefik.enable=true
       - traefik.http.routers.vaultwarden.entrypoints=websecure
-      - traefik.http.routers.vaultwarden.rule=Host(`vw.home.local`)
+      - traefik.http.routers.vaultwarden.rule=Host(`vw.home.ensilva.cc`)
       - traefik.http.routers.vaultwarden.tls=true
     networks:
       - traefik
