@@ -1,0 +1,21 @@
+name: it-tools
+
+services:
+  it-tools:
+    image: corentinth/it-tools:latest
+    restart: always
+    environment:
+      - TZ=America/Sao_Paulo
+    labels:
+      - traefik.http.routers.ittools.entrypoints=websecure
+      - traefik.http.routers.ittools.rule=Host(`tools.home.ensilva.cc`)
+      - traefik.http.routers.ittools.tls=true
+      - traefik.http.routers.ittools.service=ittools
+      - traefik.http.services.ittools.loadbalancer.server.port=80
+    networks:
+      - traefik
+
+networks:
+  traefik:
+    name: traefik
+    external: true
