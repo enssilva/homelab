@@ -3,7 +3,7 @@ name: joplin
 services:
   joplin:
     # image: florider89/joplin-server:latest
-    image: joplin/server:latest
+    image: joplin/server:${JOPLIN_VERSION}
     container_name: joplin
     restart: always
     depends_on:
