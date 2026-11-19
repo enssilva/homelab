@@ -71,3 +71,12 @@ Source: https://documentation.ubuntu.com/server/how-to/security/install-a-root-c
 The default user/login is:
 * Username: admin@localhost
 * Password: admin
+## Jellyfin
+You need to create the file vars/jellyfin.yml with the API keys (same used in jellyfin.env):
+```yml
+---
+prowlarr_api_key: "11111111111111111111111111111111"
+radarr_api_key: "22222222222222222222222222222222"
+sonarr_api_key: "33333333333333333333333333333333"
+bazarr_api_key: "44444444444444444444444444444444"
+```

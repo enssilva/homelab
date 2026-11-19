@@ -6,3 +6,4 @@ files/*.key
 files/*.ext
 ansible_collections
 .secret
+vars/jellyfin.yml

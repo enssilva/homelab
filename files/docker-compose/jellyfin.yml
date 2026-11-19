@@ -1,0 +1,316 @@
+x-dns: &default-dns
+  dns:
+    - ${DNS_PRIMARY:-1.1.1.1}
+    - ${DNS_SECONDARY:-8.8.8.8}
+
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - TZ=${TZ:-America/Sao_Paulo}
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-surfshark}
+      - VPN_TYPE=${VPN_TYPE:-wireguard}
+      - SERVER_COUNTRIES=${VPN_SERVER_COUNTRIES:-Brazil}
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY:-}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES:-10.14.0.2/16}
+      - OPENVPN_USER=${OPENVPN_USER:-}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD:-}
+      - FIREWALL_INPUT_PORTS=8080
+      - FIREWALL_OUTBOUND_SUBNETS=${DOCKER_SUBNET:-172.28.0.0/24}
+    volumes:
+      - ${CONFIG_DIR:-/srv/jellyfin/config}/gluetun:/gluetun
+    ports:
+      # Apenas portas P2P do BitTorrent expostas; interfaces web passam pelo Traefik
+      - "${QBIT_TORRENT_PORT:-6881}:6881"
+      - "${QBIT_TORRENT_PORT:-6881}:6881/udp"
+    networks:
+      - traefik
+      - media_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+
+      # --- qBittorrent WebUI (compartilha a rede do Gluetun): flix.home.ensilva.cc/qbittorrent ---
+      - traefik.http.routers.qbittorrent.entrypoints=websecure
+      - traefik.http.routers.qbittorrent.rule=Host(`${APP_HOST:-flix.home.ensilva.cc}`) && PathPrefix(`/qbittorrent`)
+      - traefik.http.routers.qbittorrent.tls=true
+      - traefik.http.routers.qbittorrent.middlewares=qbit-redirectslash,qbit-stripprefix,qbit-csp
+      - traefik.http.routers.qbittorrent.service=qbittorrent
+      - traefik.http.middlewares.qbit-redirectslash.redirectregex.regex=^(https?://[^/]+/qbittorrent)$$
+      - traefik.http.middlewares.qbit-redirectslash.redirectregex.replacement=$${1}/
+      - traefik.http.middlewares.qbit-redirectslash.redirectregex.permanent=true
+      - traefik.http.middlewares.qbit-stripprefix.stripprefix.prefixes=/qbittorrent
+      - "traefik.http.middlewares.qbit-csp.headers.contentSecurityPolicy=default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; object-src 'none'; form-action 'self'; frame-ancestors 'self';"
+      - traefik.http.services.qbittorrent.loadbalancer.server.port=8080
+    restart: unless-stopped
+
+  qbittorrent:
+    image: ghcr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    depends_on:
+      - gluetun
+    environment:
+      - PUID=${PUID:-1001}
+      - PGID=${PGID:-1001}
+      - TZ=${TZ:-America/Sao_Paulo}
+      - WEBUI_PORT=8080
+    volumes:
+      - ${CONFIG_DIR:-/srv/jellyfin/config}/qbittorrent:/config
+      - ${DATA_DIR:-/srv/jellyfin/data}:/data
+    restart: unless-stopped
+
+  prowlarr:
+    <<: *default-dns
+    image: ghcr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID:-1001}
+      - PGID=${PGID:-1001}
+      - TZ=${TZ:-America/Sao_Paulo}
+      - PROWLARR__AUTH__APIKEY=${PROWLARR_API_KEY:-99887766554433221100ffeeddccbbaa}
+      - PROWLARR__AUTH__METHOD=Forms
+      - PROWLARR__AUTH__REQUIRED=DisabledForLocalAddresses
+      - PROWLARR__SERVER__URLBASE=/prowlarr
+    volumes:
+      - ${CONFIG_DIR:-/srv/jellyfin/config}/prowlarr:/config
+    networks:
+      - traefik
+      - media_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.prowlarr.entrypoints=websecure
+      - traefik.http.routers.prowlarr.rule=Host(`${APP_HOST:-flix.home.ensilva.cc}`) && PathPrefix(`/prowlarr`)
+      - traefik.http.routers.prowlarr.tls=true
+      - traefik.http.routers.prowlarr.service=prowlarr
+      - traefik.http.services.prowlarr.loadbalancer.server.port=9696
+    restart: unless-stopped
+
+  radarr:
+    <<: *default-dns
+    image: ghcr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${PUID:-1001}
+      - PGID=${PGID:-1001}
+      - TZ=${TZ:-America/Sao_Paulo}
+      - RADARR__AUTH__APIKEY=${RADARR_API_KEY:-a1b2c3d4e5f60718293a4b5c6d7e8f90}
+      - RADARR__AUTH__METHOD=Forms
+      - RADARR__AUTH__REQUIRED=DisabledForLocalAddresses
+      - RADARR__SERVER__URLBASE=/radarr
+    volumes:
+      - ${CONFIG_DIR:-/srv/jellyfin/config}/radarr:/config
+      - ${DATA_DIR:-/srv/jellyfin/data}:/data
+    networks:
+      - traefik
+      - media_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.radarr.entrypoints=websecure
+      - traefik.http.routers.radarr.rule=Host(`${APP_HOST:-flix.home.ensilva.cc}`) && PathPrefix(`/radarr`)
+      - traefik.http.routers.radarr.tls=true
+      - traefik.http.routers.radarr.service=radarr
+      - traefik.http.services.radarr.loadbalancer.server.port=7878
+    restart: unless-stopped
+
+  sonarr:
+    <<: *default-dns
+    image: ghcr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${PUID:-1001}
+      - PGID=${PGID:-1001}
+      - TZ=${TZ:-America/Sao_Paulo}
+      - SONARR__AUTH__APIKEY=${SONARR_API_KEY:-11223344556677889900aabbccddeeff}
+      - SONARR__AUTH__METHOD=Forms
+      - SONARR__AUTH__REQUIRED=DisabledForLocalAddresses
+      - SONARR__SERVER__URLBASE=/sonarr
+    volumes:
+      - ${CONFIG_DIR:-/srv/jellyfin/config}/sonarr:/config
+      - ${DATA_DIR:-/srv/jellyfin/data}:/data
+    networks:
+      - traefik
+      - media_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.sonarr.entrypoints=websecure
+      - traefik.http.routers.sonarr.rule=Host(`${APP_HOST:-flix.home.ensilva.cc}`) && PathPrefix(`/sonarr`)
+      - traefik.http.routers.sonarr.tls=true
+      - traefik.http.routers.sonarr.service=sonarr
+      - traefik.http.services.sonarr.loadbalancer.server.port=8989
+    restart: unless-stopped
+
+  bazarr:
+    <<: *default-dns
+    image: ghcr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    environment:
+      - PUID=${PUID:-1001}
+      - PGID=${PGID:-1001}
+      - TZ=${TZ:-America/Sao_Paulo}
+    volumes:
+      - ${CONFIG_DIR:-/srv/jellyfin/config}/bazarr:/config
+      - ${DATA_DIR:-/srv/jellyfin/data}/media:/data/media
+    networks:
+      - traefik
+      - media_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.bazarr.entrypoints=websecure
+      - traefik.http.routers.bazarr.rule=Host(`${APP_HOST:-flix.home.ensilva.cc}`) && PathPrefix(`/bazarr`)
+      - traefik.http.routers.bazarr.tls=true
+      - traefik.http.routers.bazarr.service=bazarr
+      - traefik.http.services.bazarr.loadbalancer.server.port=6767
+    restart: unless-stopped
+
+  provisioner:
+    <<: *default-dns
+    image: python:3-alpine
+    container_name: provisioner
+    command: ["python3", "/provision.py"]
+    environment:
+      - PUID=${PUID:-1001}
+      - PGID=${PGID:-1001}
+      - APP_HOST=${APP_HOST:-flix.home.ensilva.cc}
+      - QBIT_HOST=${QBIT_HOST:-gluetun}
+      - QBIT_NETWORK_INTERFACE=${QBIT_NETWORK_INTERFACE:-}
+      - QBIT_ADMIN_USER=${QBIT_ADMIN_USER:-}
+      - QBIT_ADMIN_PASS=${QBIT_ADMIN_PASS:-}
+      - QBIT_AUTH_SUBNET_WHITELIST=${QBIT_AUTH_SUBNET_WHITELIST:-172.28.0.0/24}
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY:-99887766554433221100ffeeddccbbaa}
+      - RADARR_API_KEY=${RADARR_API_KEY:-a1b2c3d4e5f60718293a4b5c6d7e8f90}
+      - SONARR_API_KEY=${SONARR_API_KEY:-11223344556677889900aabbccddeeff}
+      - BAZARR_API_KEY=${BAZARR_API_KEY:-b1a2z3a4r5r60718293a4b5c6d7e8f90}
+      - JELLYFIN_ADMIN_USER=${JELLYFIN_ADMIN_USER:-admin}
+      - JELLYFIN_ADMIN_PASS=${JELLYFIN_ADMIN_PASS:-admin}
+      - JELLYFIN_UI_CULTURE=${JELLYFIN_UI_CULTURE:-en-US}
+      - JELLYFIN_METADATA_COUNTRY=${JELLYFIN_METADATA_COUNTRY:-US}
+      - JELLYFIN_METADATA_LANG=${JELLYFIN_METADATA_LANG:-en}
+      - JELLYFIN_MONITOR_DELAY=${JELLYFIN_MONITOR_DELAY:-10}
+      - JELLYFIN_SERVER_NAME=${JELLYFIN_SERVER_NAME:-Jellyfin}
+      - JELLYFIN_HWACCEL=${JELLYFIN_HWACCEL:-rkmpp}
+      - SEERR_DEFAULT_PROFILE_ID=${SEERR_DEFAULT_PROFILE_ID:-4}
+      - SEERR_DEFAULT_PROFILE_NAME=${SEERR_DEFAULT_PROFILE_NAME:-HD-1080p}
+      - PROWLARR_INDEXERS=${PROWLARR_INDEXERS:-YTS,Knaben,The Pirate Bay,RuTor}
+      - PROWLARR_MIN_SEEDERS=${PROWLARR_MIN_SEEDERS:-2}
+      - AUDIO_ORIGINAL_ONLY=${AUDIO_ORIGINAL_ONLY:-true}
+      - RADARR_MAX_SIZE_MB_MIN=${RADARR_MAX_SIZE_MB_MIN:-48.0}
+      - SONARR_MAX_SIZE_MB_MIN=${SONARR_MAX_SIZE_MB_MIN:-48.0}
+      - BAZARR_LANGUAGES=${BAZARR_LANGUAGES:-pb,en}
+      - BAZARR_PROFILE_NAME=${BAZARR_PROFILE_NAME:-pt-BR + EN}
+      - BAZARR_ALLOW_HI=${BAZARR_ALLOW_HI:-Include}
+      - BAZARR_MIN_SCORE_MOVIE=${BAZARR_MIN_SCORE_MOVIE:-60}
+      - BAZARR_MIN_SCORE_SERIES=${BAZARR_MIN_SCORE_SERIES:-70}
+      - BAZARR_AUTO_SYNC=${BAZARR_AUTO_SYNC:-true}
+      - BAZARR_DEFAULT_PROVIDERS=${BAZARR_DEFAULT_PROVIDERS:-embeddedsubtitles,yifysubtitles,tvsubtitles,podnapisi,gestdown}
+      - OPENSUBTITLES_USER=${OPENSUBTITLES_USER:-}
+      - OPENSUBTITLES_PASS=${OPENSUBTITLES_PASS:-}
+      - SUBSOURCE_API_KEY=${SUBSOURCE_API_KEY:-}
+      - ARR_ADMIN_USER=${ARR_ADMIN_USER:-}
+      - ARR_ADMIN_PASS=${ARR_ADMIN_PASS:-}
+      - BAZARR_ADMIN_USER=${BAZARR_ADMIN_USER:-}
+      - BAZARR_ADMIN_PASS=${BAZARR_ADMIN_PASS:-}
+    volumes:
+      - ${STACK_DIR:-/srv/jellyfin}/provision.py:/provision.py:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - gluetun
+      - qbittorrent
+      - prowlarr
+      - radarr
+      - sonarr
+      - bazarr
+      - jellyfin
+      - seerr
+    networks:
+      - media_net
+    labels:
+      - traefik.enable=false
+    restart: "no"
+
+  jellyfin:
+    <<: *default-dns
+    image: ghcr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    security_opt:
+      - systempaths=unconfined
+      - apparmor=unconfined
+    group_add:
+      - video
+    environment:
+      - PUID=${PUID:-1001}
+      - PGID=${PGID:-1001}
+      - TZ=${TZ:-America/Sao_Paulo}
+      - JELLYFIN_PublishedServerUrl=https://${APP_HOST:-flix.home.ensilva.cc}
+    devices:
+      # Aceleração de hardware Rockchip RK3588S (VPU MPP + RGA + GPU Mali-G610 OpenCL tone-mapping)
+      - /dev/rga:/dev/rga
+      - /dev/dri:/dev/dri
+      - /dev/dma_heap:/dev/dma_heap
+      - /dev/mpp_service:/dev/mpp_service
+      - /dev/mali0:/dev/mali0
+    volumes:
+      - /etc/OpenCL:/etc/OpenCL:ro
+      - /usr/lib/aarch64-linux-gnu/libmali-x11/libmali-valhall-g610-g13p0-x11-wayland-gbm.so:/usr/lib/libmali.so:ro
+      - ${CONFIG_DIR:-/srv/jellyfin/config}/jellyfin:/config
+      - ${DATA_DIR:-/srv/jellyfin/data}/media:/data/media
+    ports:
+      # Mantém apenas a descoberta automática UDP na rede local (HTTP passa pelo Traefik)
+      - "${PUBLIC_BIND_IP:-0.0.0.0}:${JELLYFIN_DISCOVERY_PORT:-7359}:7359/udp"
+    networks:
+      - traefik
+      - media_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.jellyfin.entrypoints=websecure
+      - traefik.http.routers.jellyfin.rule=Host(`${APP_HOST:-flix.home.ensilva.cc}`)
+      - traefik.http.routers.jellyfin.tls=true
+      # Prioridade baixa (1) para não interceptar os subpaths /radarr, /sonarr, /prowlarr, /bazarr, /qbittorrent
+      - traefik.http.routers.jellyfin.priority=1
+      - traefik.http.routers.jellyfin.service=jellyfin
+      - traefik.http.services.jellyfin.loadbalancer.server.port=8096
+    restart: unless-stopped
+
+  seerr:
+    <<: *default-dns
+    image: ghcr.io/seerr-team/seerr:latest
+    container_name: seerr
+    user: "${PUID:-1001}:${PGID:-1001}"
+    init: true
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TZ:-America/Sao_Paulo}
+    volumes:
+      - ${CONFIG_DIR:-/srv/jellyfin/config}/seerr:/app/config
+    networks:
+      - traefik
+      - media_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.seerr.entrypoints=websecure
+      - traefik.http.routers.seerr.rule=Host(`${SEERR_HOST:-flix-search.home.ensilva.cc}`)
+      - traefik.http.routers.seerr.tls=true
+      - traefik.http.routers.seerr.service=seerr
+      - traefik.http.services.seerr.loadbalancer.server.port=5055
+    restart: unless-stopped
+
+networks:
+  traefik:
+    name: traefik
+    external: true
+  media_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET:-172.28.0.0/24}

@@ -1,0 +1,171 @@
+---
+- name: Configurar estrutura e arquivos iniciais da stack Jellyfin / *Arr
+  hosts: hl
+  become: true
+  vars_files:
+    - vars/main.yml
+    - vars/jellyfin.yml
+  vars:
+    jellyfin_base_dir: /srv/jellyfin
+    jellyfin_config_dir: "{{ jellyfin_base_dir }}/config"
+    jellyfin_data_dir: "{{ jellyfin_base_dir }}/data"
+    jellyfin_puid: "1001"
+    jellyfin_pgid: "1001"
+
+    # Parâmetros iniciais do qBittorrent e Bazarr
+    qbit_host: "gluetun"
+    qbit_network_interface: "{{ 'tun0' if qbit_host == 'gluetun' else '' }}"
+    qbit_torrent_port: 6881
+    qbit_auth_subnet_whitelist: "172.28.0.0/24"
+    qbit_max_connections: 200
+    qbit_max_connections_per_torrent: 50
+    qbit_max_uploads: 20
+    qbit_max_uploads_per_torrent: 5
+    qbit_utp_rate_limited: "true"
+    bazarr_min_score_movie: 60
+    bazarr_min_score_series: 70
+
+  tasks:
+    - name: Criar diretório raiz da stack Jellyfin
+      ansible.builtin.file:
+        path: "{{ jellyfin_base_dir }}"
+        state: directory
+        owner: "{{ jellyfin_puid }}"
+        group: "{{ jellyfin_pgid }}"
+        mode: "0755"
+      tags: jellyfin
+
+    - name: Criar estrutura de diretórios de configuração
+      ansible.builtin.file:
+        path: "{{ jellyfin_config_dir }}/{{ item }}"
+        state: directory
+        owner: "{{ jellyfin_puid }}"
+        group: "{{ jellyfin_pgid }}"
+        mode: "0755"
+      loop:
+        - jellyfin
+        - seerr
+        - prowlarr
+        - radarr
+        - sonarr
+        - bazarr/config
+        - qbittorrent/qBittorrent
+        - gluetun
+      tags: jellyfin
+
+    - name: Criar estrutura de diretórios de mídia e torrents
+      ansible.builtin.file:
+        path: "{{ jellyfin_data_dir }}/{{ item }}"
+        state: directory
+        owner: "{{ jellyfin_puid }}"
+        group: "{{ jellyfin_pgid }}"
+        mode: "0755"
+      loop:
+        - torrents/movies
+        - torrents/tv
+        - media/movies
+        - media/tv
+      tags: jellyfin
+
+    - name: Copiar provision.py para o homelab
+      ansible.builtin.copy:
+        src: files/provision.py
+        dest: "{{ jellyfin_base_dir }}/provision.py"
+        owner: "{{ jellyfin_puid }}"
+        group: "{{ jellyfin_pgid }}"
+        mode: "0755"
+      tags: jellyfin
+
+    - name: Gerar qBittorrent.conf inicial (sem sobrescrever alterações posteriores)
+      ansible.builtin.copy:
+        dest: "{{ jellyfin_config_dir }}/qbittorrent/qBittorrent/qBittorrent.conf"
+        owner: "{{ jellyfin_puid }}"
+        group: "{{ jellyfin_pgid }}"
+        mode: "0644"
+        force: false
+        content: |
+          [BitTorrent]
+          Connection\Interface={{ qbit_network_interface }}
+          Connection\InterfaceName={{ qbit_network_interface }}
+          Session\Port={{ qbit_torrent_port }}
+          Session\DefaultSavePath=/data/torrents
+          Session\DisableAutoTMMByDefault=false
+          Session\TempPathEnabled=false
+          Session\QueueingSystemEnabled=false
+          Session\MaxConnections={{ qbit_max_connections }}
+          Session\MaxConnectionsPerTorrent={{ qbit_max_connections_per_torrent }}
+          Session\MaxUploads={{ qbit_max_uploads }}
+          Session\MaxUploadsPerTorrent={{ qbit_max_uploads_per_torrent }}
+          Session\uTPRateLimited={{ qbit_utp_rate_limited }}
+
+          [Preferences]
+          WebUI\Port=8080
+          WebUI\LocalHostAuth=false
+          WebUI\HostHeaderValidation=false
+          WebUI\AuthSubnetWhitelistEnabled=true
+          WebUI\AuthSubnetWhitelist={{ qbit_auth_subnet_whitelist }}
+      tags: jellyfin
+
+    - name: Gerar categories.json inicial do qBittorrent
+      ansible.builtin.copy:
+        dest: "{{ jellyfin_config_dir }}/qbittorrent/qBittorrent/categories.json"
+        owner: "{{ jellyfin_puid }}"
+        group: "{{ jellyfin_pgid }}"
+        mode: "0644"
+        force: false
+        content: |
+          {
+            "movies": {
+              "save_path": "/data/torrents/movies"
+            },
+            "tv": {
+              "save_path": "/data/torrents/tv"
+            }
+          }
+      tags: jellyfin
+
+    - name: Gerar config.yaml inicial do Bazarr
+      ansible.builtin.copy:
+        dest: "{{ jellyfin_config_dir }}/bazarr/config/config.yaml"
+        owner: "{{ jellyfin_puid }}"
+        group: "{{ jellyfin_pgid }}"
+        mode: "0644"
+        force: false
+        content: |
+          auth:
+            apikey: {{ bazarr_api_key }}
+            type: null
+
+          general:
+            ip: 0.0.0.0
+            port: 6767
+            base_url: /bazarr
+            use_radarr: true
+            use_sonarr: true
+            serie_default_enabled: true
+            serie_default_profile: 1
+            movie_default_enabled: true
+            movie_default_profile: 1
+            minimum_score: {{ bazarr_min_score_series }}
+            minimum_score_movie: {{ bazarr_min_score_movie }}
+            enabled_providers:
+              - embeddedsubtitles
+              - yifysubtitles
+              - tvsubtitles
+              - podnapisi
+              - gestdown
+
+          radarr:
+            apikey: {{ radarr_api_key }}
+            ip: radarr
+            port: 7878
+            base_url: /radarr
+            ssl: false
+
+          sonarr:
+            apikey: {{ sonarr_api_key }}
+            ip: sonarr
+            port: 8989
+            base_url: /sonarr
+            ssl: false
+      tags: jellyfin
